@@ -108,7 +108,3 @@ otomatis (sesuai *Out of Scope* PRD).
 Script sudah diuji manual dengan mock `etcdctl` untuk skenario:
 - Single CP sehat → backup sukses (exit 0)
 - Single CP down → quorum lost (exit 3)
-
-Untuk automated test lengkap (semua skenario di PRD bagian 11), sarankan
-tambahkan `pytest` dengan mocking `subprocess.run` — beri tahu saya bila
-ingin saya buatkan suite test-nya juga.
