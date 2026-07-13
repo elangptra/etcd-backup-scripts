@@ -1,0 +1,18 @@
+[Unit]
+Description=ETCD Backup Service
+Wants=network-online.target
+After=network-online.target containerd.service
+
+[Service]
+Type=oneshot
+# Dijalankan sebagai root karena:
+#  1. crictl exec butuh akses socket containerd (/run/containerd/containerd.sock),
+#     yang defaultnya hanya bisa diakses root.
+#  2. Sertifikat ETCD (server.key) di /etc/kubernetes/pki/etcd/ hanya readable root.
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /opt/etcd-backup-service/scripts/etcd_backup.py /etc/etcd-backup/config.yaml
+# Hardening dasar. ProtectSystem=strict SENGAJA tidak dipakai karena akan
+# memblokir akses baca/tulis ke /run/containerd/containerd.sock.
+NoNewPrivileges=true
+PrivateTmp=true

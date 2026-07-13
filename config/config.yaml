@@ -1,0 +1,63 @@
+# =============================================================================
+# ETCD Backup Service - Configuration
+# Cluster mode: single control plane
+# Semua nilai operasional HARUS berasal dari file ini, tidak boleh hardcode.
+# =============================================================================
+
+cluster:
+  name: k8s-prod   # bebas, dipakai untuk penamaan folder & file snapshot
+
+backup:
+  local_directory: /backup/etcd
+  retention_days: 7
+
+storage:
+  nfs_path: /srv/nfs/kubedata
+  retention_days: 90
+  # Timeout (detik) untuk operasi copy ke NFS
+  copy_timeout_seconds: 120
+
+prometheus:
+  # Karena job ini dijalankan lewat systemd timer/cron (bukan long-running
+  # process), metric diekspos melalui node_exporter textfile collector,
+  # bukan lewat HTTP server yang hidup sebentar lalu mati.
+  # Arahkan node_exporter --collector.textfile.directory ke folder ini.
+  textfile_directory: /var/lib/node_exporter/textfile_collector
+  metric_filename: etcd_backup.prom
+
+etcd:
+  # Single control plane -> hanya 1 endpoint, tapi struktur list agar
+  # kompatibel jika nanti dikembangkan ke multi control plane.
+  # hostNetwork: true pada static pod etcd kubeadm, jadi 127.0.0.1 di sini
+  # tetap valid walau dieksekusi dari DALAM container lewat crictl exec.
+  endpoints:
+    - https://127.0.0.1:2379
+  ca_cert: /etc/kubernetes/pki/etcd/ca.crt
+  cert_file: /etc/kubernetes/pki/etcd/server.crt
+  key_file: /etc/kubernetes/pki/etcd/server.key
+
+  # --- Eksekusi via crictl exec (host tidak install binary etcdctl) ---
+  # Nama binary etcdctl DI DALAM container (biasanya sudah ada di PATH image resmi)
+  etcdctl_path: etcdctl
+  # etcd 3.6+ MENGHAPUS `etcdctl snapshot status` - dipindah ke tool
+  # terpisah `etcdutl` (bekerja offline langsung ke file, tanpa perlu
+  # cert/endpoint). Biasanya juga sudah ada di PATH image resmi.
+  etcdutl_path: etcdutl
+  # Nama container static pod etcd (default kubeadm persis "etcd")
+  container_name: etcd
+  # Path binary crictl di HOST
+  crictl_path: /usr/bin/crictl
+  # Data dir etcd (hostPath yang identik antara host & container) -
+  # dipakai sebagai lokasi sementara sebelum snapshot divalidasi &
+  # dipindah ke backup.local_directory
+  data_dir: /var/lib/etcd
+
+  # Timeout per operasi etcdctl / crictl (detik)
+  command_timeout_seconds: 30
+
+lock:
+  file: /run/etcd-backup.lock
+
+logging:
+  file: /var/log/etcd-backup/etcd-backup.log
+  level: INFO
