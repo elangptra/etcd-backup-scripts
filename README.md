@@ -1,92 +1,114 @@
-# etcd-backup-manifest
+# ETCD Backup Service
 
+Automated, production-ready ETCD snapshot backup untuk Kubernetes cluster
+**single control plane**. Struktur kode dirancang agar mudah diperluas ke
+multi control plane di masa depan (lihat komentar `select_endpoint()`).
 
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## Struktur
 
 ```
-cd existing_repo
-git remote add origin https://git.wahana.com/guestx/etcd-backup-manifest.git
-git branch -M main
-git push -uf origin main
+etcd-backup-service/
+├── config/
+│   └── config.yaml            # Konfigurasi (tidak ada nilai hardcoded di kode)
+├── scripts/
+│   └── etcd_backup.py         # Script utama
+├── systemd/
+│   ├── etcd-backup.service
+│   └── etcd-backup.timer
+├── docs/
+│   └── RESTORE.md             # Panduan restore manual (out of scope: restore otomatis)
+└── requirements.txt
 ```
 
-## Integrate with your tools
+## Instalasi
 
-- [ ] [Set up project integrations](https://git.wahana.com/guestx/etcd-backup-manifest/-/settings/integrations)
+```bash
+sudo mkdir -p /opt/etcd-backup-service
+sudo cp -r scripts /opt/etcd-backup-service/
+sudo mkdir -p /etc/etcd-backup
+sudo cp config/config.yaml /etc/etcd-backup/config.yaml
+sudo chmod 640 /etc/etcd-backup/config.yaml
 
-## Collaborate with your team
+pip install -r requirements.txt --break-system-packages
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+sudo mkdir -p /backup/etcd /var/log/etcd-backup /var/lib/node_exporter/textfile_collector
 
-## Test and Deploy
+sudo cp systemd/etcd-backup.service systemd/etcd-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now etcd-backup.timer
+```
 
-Use the built-in continuous integration in GitLab.
+> Service ini dijalankan sebagai **root** karena `crictl exec` butuh akses
+> ke socket containerd, dan sertifikat ETCD (`server.key`) hanya bisa dibaca
+> root. Lihat komentar di `etcd-backup.service` untuk detail.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Konfigurasi
 
-***
+Edit `/etc/etcd-backup/config.yaml`:
 
-# Editing this README
+- `etcd.endpoints`: untuk single control plane, cukup 1 endpoint
+  (`https://127.0.0.1:2379`)
+- `etcd.ca_cert` / `cert_file` / `key_file`: biasanya di
+  `/etc/kubernetes/pki/etcd/`
+- `storage.nfs_path`: pastikan sudah di-mount sebelum service berjalan
+  (tambahkan dependency mount di systemd bila perlu)
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!).  Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## Menjalankan Manual
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```bash
+sudo -u etcd-backup python3 /opt/etcd-backup-service/scripts/etcd_backup.py /etc/etcd-backup/config.yaml
+echo "Exit code: $?"
+```
 
-## Name
-Choose a self-explaining name for your project.
+## Exit Codes
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+| Code | Arti               |
+|------|---------------------|
+| 0    | Success              |
+| 1    | Config Error         |
+| 2    | Health Check Failed  |
+| 3    | Quorum Lost          |
+| 4    | Snapshot Failed       |
+| 5    | Snapshot Invalid     |
+| 6    | Compression Failed   |
+| 7    | NFS Failed            |
+| 8    | Unexpected Error     |
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Monitoring
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Metric ditulis ke file `.prom` (node_exporter textfile collector) karena job
+ini one-shot lewat systemd timer, bukan long-running process — jadi lebih
+tepat pakai textfile collector daripada `start_http_server` yang cuma hidup
+sesaat.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Arahkan node_exporter:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+node_exporter --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Metric yang tersedia: `etcd_backup_success`, `etcd_backup_duration_seconds`,
+`etcd_backup_size_bytes`, `etcd_backup_last_success_timestamp`,
+`etcd_snapshot_verified`, `etcd_nfs_copy_success`, `etcd_healthy_members`,
+`etcd_selected_endpoint_info`, `etcd_backup_running`, `etcd_backup_total`,
+`etcd_backup_failed_total`.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Contoh Alertmanager rule ada di PRD bagian 8 — bisa langsung dipetakan ke
+metric-metric di atas (mis. `etcd_backup_success == 0`,
+`time() - etcd_backup_last_success_timestamp > 86400`,
+`etcd_healthy_members < 1`).
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## Restore
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Lihat [`docs/RESTORE.md`](docs/RESTORE.md). Restore **manual**, tidak
+otomatis (sesuai *Out of Scope* PRD).
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Testing
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Script sudah diuji manual dengan mock `etcdctl` untuk skenario:
+- Single CP sehat → backup sukses (exit 0)
+- Single CP down → quorum lost (exit 3)
 
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Untuk automated test lengkap (semua skenario di PRD bagian 11), sarankan
+tambahkan `pytest` dengan mocking `subprocess.run` — beri tahu saya bila
+ingin saya buatkan suite test-nya juga.
