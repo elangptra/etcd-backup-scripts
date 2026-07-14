@@ -37,19 +37,10 @@ etcd:
   key_file: /etc/kubernetes/pki/etcd/server.key
 
   # --- Eksekusi via crictl exec (host tidak install binary etcdctl) ---
-  # Nama binary etcdctl DI DALAM container (biasanya sudah ada di PATH image resmi)
   etcdctl_path: etcdctl
-  # etcd 3.6+ MENGHAPUS `etcdctl snapshot status` - dipindah ke tool
-  # terpisah `etcdutl` (bekerja offline langsung ke file, tanpa perlu
-  # cert/endpoint). Biasanya juga sudah ada di PATH image resmi.
   etcdutl_path: etcdutl
-  # Nama container static pod etcd (default kubeadm persis "etcd")
   container_name: etcd
-  # Path binary crictl di HOST
   crictl_path: /usr/bin/crictl
-  # Data dir etcd (hostPath yang identik antara host & container) -
-  # dipakai sebagai lokasi sementara sebelum snapshot divalidasi &
-  # dipindah ke backup.local_directory
   data_dir: /var/lib/etcd
 
   # Timeout per operasi etcdctl / crictl (detik)

@@ -2,7 +2,7 @@
 Description=Run ETCD Backup Service every hour
 
 [Timer]
-# Sesuaikan jadwal sesuai kebutuhan RPO cluster Anda
+# Sesuaikan jadwal disini
 OnCalendar=hourly
 RandomizedDelaySec=120
 Persistent=true

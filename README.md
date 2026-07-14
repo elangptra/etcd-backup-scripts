@@ -162,14 +162,12 @@ Rule berikut sudah diimplementasikan dan diverifikasi berjalan (grup
 - `etcdNfsCopyFailed` — `etcd_nfs_copy_success == 0`
 - `etcdSnapshotInvalid` — `etcd_snapshot_verified == 0`
 
-Rule ini mengacu ke PRD bagian 8; silakan sesuaikan threshold
-(`> 86400` dsb.) dan label `instance` sesuai kebutuhan multi-cluster di
-masa depan.
+Silakan sesuaikan threshold (`> 86400` dsb.) dan label `instance` sesuai kebutuhan multi-cluster di masa depan.
 
 ## Restore
 
 Lihat [`docs/RESTORE.md`](docs/RESTORE.md). Restore **manual**, tidak
-otomatis (sesuai *Out of Scope* PRD).
+otomatis.
 
 ## Testing
 
